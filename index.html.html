@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>落札代行 見積書 自動入力アシスタント v9.3（表示は“万円/円/kg/ヶ月”）</title>
+<style>
+:root{--bg:#0b0f14;--card:#121a23;--text:#eaf2ff;--muted:#9bb0c7;--stroke:#223244;--accent:#5da9ff;--ok:#06c755;--danger:#ff5d6c;--r:18px}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:10;background:rgba(11,15,20,.88);backdrop-filter:blur(10px);border-bottom:1px solid rgba(34,50,68,.8)}
+.container{max-width:1220px;margin:0 auto;padding:16px}
+.card{background:rgba(18,26,35,.92);border:1px solid rgba(34,50,68,.9);border-radius:var(--r);padding:16px}
+.grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media (min-width:1060px){.grid{grid-template-columns:1.15fr .85fr}}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+h1{font-size:16px;margin:0}
+.sub{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
+label{font-size:12px;color:var(--muted)}
+input[type="file"],input[type="text"],input[type="tel"],select{
+  padding:10px 12px;border:1px solid rgba(34,50,68,.9);border-radius:14px;background:rgba(11,15,20,.35);color:var(--text);width:100%
+}
+.btn{border:1px solid rgba(93,169,255,.45);background:rgba(93,169,255,.18);color:var(--text);padding:10px 14px;border-radius:14px;cursor:pointer;font-weight:800}
+.btn.ghost{border-color:rgba(34,50,68,.9);background:rgba(11,15,20,.35)}
+.btn.ok{border-color:rgba(6,199,85,.55);background:rgba(6,199,85,.18)}
+.btn.warn{border-color:rgba(255,93,108,.55);background:rgba(255,93,108,.14)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid rgba(34,50,68,.9);background:rgba(11,15,20,.35);color:var(--muted);font-size:12px}
+.box{border:1px solid rgba(34,50,68,.9);background:rgba(11,15,20,.25);padding:12px;border-radius:16px}
+.small{font-size:12px;color:var(--muted);line-height:1.55}
+pre{white-space:pre-wrap;margin:0;border:1px solid rgba(34,50,68,.9);background:rgba(11,15,20,.35);border-radius:16px;padding:12px}
+.kv{display:grid;grid-template-columns:190px 1fr;gap:8px;align-items:center}
+.warnbox{border:1px solid rgba(255,93,108,.55);background:rgba(255,93,108,.10);padding:10px 12px;border-radius:14px}
+.okbox{border:1px solid rgba(6,199,85,.55);background:rgba(6,199,85,.10);padding:10px 12px;border-radius:14px}
+.drop{border:1px dashed rgba(93,169,255,.55);background:rgba(93,169,255,.08);padding:14px;border-radius:16px}
+.drop.drag{outline:2px solid rgba(93,169,255,.85)}
+canvas{max-width:100%;border:1px solid rgba(34,50,68,.9);border-radius:16px;background:rgba(11,15,20,.2)}
+hr{border:0;border-top:1px solid rgba(34,50,68,.7);margin:14px 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <h1>落札代行 見積書 自動入力アシスタント v9.3（表示は“万円/円/kg/ヶ月”）</h1>
+        <div class="sub">
+          ✅ v9.3の変更点：<strong>価格=L12は“万円”表示</strong>／<strong>残月=N12は“ヶ月”表示</strong>／<strong>重量=N14は“kg”表示</strong>／<strong>リサイクル=円表示</strong><br>
+          ✅ 「令和◯年◯月◯日」のように<strong>日付まである</strong>ものは <strong>車検</strong> と判断（年式には入れません）
+        </div>
+      </div>
+      <div class="row">
+        <span class="pill" id="libExcel">ExcelJS:確認中…</span>
+        <span class="pill" id="libDocx">DOCX:確認中…</span>
+        <span class="pill" id="libPdf">PDF:確認中…</span>
+        <span class="pill" id="libOcr">OCR:任意</span>
+        <span class="pill" id="status">待機中</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="grid">
+    <section class="card">
+      <div class="okbox small">
+        ✅ 数式セルは壊しません（数式セルには上書きしない）<br>
+        ✅ 年式：<strong>B11=年号 / C11=年 / G11=月</strong>　✅ 車検残月：0〜25（表示は「◯ヶ月」）
+      </div>
+      <div id="warn" class="warnbox small" style="margin-top:12px;display:none"></div>
+
+      <div class="box" style="margin-top:12px">
+        <label>① Word（お客様情報 .docx）</label>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1;min-width:260px"><input type="file" id="docx" accept=".docx"/></div>
+          <button class="btn ghost" id="btnReadDocx" type="button">Wordを解析</button>
+        </div>
+        <div class="small" id="docxInfo" style="margin-top:6px">未選択</div>
+      </div>
+
+      <div class="box" style="margin-top:12px">
+        <label>② 出品票PDF（.pdf）</label>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1;min-width:260px"><input type="file" id="pdf" accept="application/pdf"/></div>
+          <button class="btn ghost" id="btnReadPdf" type="button">PDFを解析</button>
+        </div>
+        <div class="small" id="pdfInfo" style="margin-top:6px">未選択</div>
+      </div>
+
+      <div class="box" style="margin-top:12px">
+        <label>（任意）PDFが画像の場合：スクショOCR（PNG/JPG/WebP）</label>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1;min-width:260px"><input type="file" id="img" accept="image/*"/></div>
+          <button class="btn warn" id="btnOcr" type="button">OCRして補完</button>
+        </div>
+        <div class="drop small" id="dropImg" style="margin-top:10px">
+          ここに<strong>スクショ画像</strong>をドラッグ＆ドロップ / クリックしてフォーカス後に <strong>Ctrl+V</strong>（画像貼り付け）
+          <div class="small" id="imgInfo" style="margin-top:6px">未選択</div>
+        </div>
+        <div style="margin-top:10px"><canvas id="cv" width="900" height="420"></canvas></div>
+      </div>
+
+      <div class="box" style="margin-top:12px">
+        <label>③ 原紙Excel（テンプレ .xlsx）</label>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1;min-width:260px"><input type="file" id="xlsx" accept=".xlsx"/></div>
+          <button class="btn ok" id="btnDL" disabled type="button">入力済みExcelをDL</button>
+        </div>
+        <div class="small" id="xlsxInfo" style="margin-top:6px">未選択</div>
+      </div>
+
+      <hr>
+
+      <div class="box">
+        <div class="pill">抽出結果（必要なら手入力）</div>
+
+        <div class="kv" style="margin-top:12px">
+          <div>お客様名（A2）</div><div><input id="name" type="text"/></div>
+          <div>郵便番号（B3）</div><div><input id="zip" type="text" placeholder="283-0065"/></div>
+          <div>都道府県（G3）</div><div><input id="pref" type="text" placeholder="千葉県"/></div>
+          <div>住所（B4）</div><div><input id="addr" type="text"/></div>
+          <div>TEL（B7）</div><div><input id="tel" type="tel" placeholder="090-1234-5678"/></div>
+
+          <div>メーカー（B9）</div><div><input id="maker" type="text"/></div>
+          <div>車名＋グレード（B10）</div><div><input id="nameg" type="text"/></div>
+
+          <div>年式（例：R5/03）</div><div><input id="year" type="text" placeholder="R5/03, H25/05 など（※日付が入るものは車検へ）"/></div>
+          <div>型式（B12）</div><div><input id="model" type="text"/></div>
+          <div>車台番号（B13）</div><div><input id="chassis" type="text"/></div>
+          <div>排気量（B14）</div><div><input id="disp" type="text" placeholder="2993cc"/></div>
+
+          <div>会場（M10）</div><div><input id="venue" type="text" placeholder="USS大阪 など"/></div>
+
+          <div>車検（例：R9/12 or 抹消）</div><div><input id="shaken" type="text" placeholder="R7/08/09 や 令和7年8月9日 などOK"/></div>
+          <div>車検残月（N12 0〜25）</div>
+          <div class="row" style="gap:8px">
+            <select id="remainSel" style="max-width:160px">
+              <option value="">自動/未設定</option>
+            </select>
+            <input id="remain" type="text" placeholder="9（表示は9ヶ月）"/>
+          </div>
+
+          <div>リサイクル料（G14）</div><div><input id="recycle" type="text" placeholder="20350（表示は20350円）"/></div>
+          <div>新車時価格（L12）</div><div><input id="price" type="text" placeholder="1208（表示は1208万円）"/></div>
+          <div>車両重量（N14）</div><div><input id="weight" type="text" placeholder="2490（表示は2490kg）"/></div>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn ghost" id="btnTel" type="button">TEL整形</button>
+          <button class="btn ghost" id="btnCalc" type="button">残月を再計算</button>
+          <span class="pill" id="remainHint">残月: 未設定</span>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn ghost" id="g" type="button">Google検索</button>
+          <button class="btn ghost" id="cs" type="button">カーセンサー</button>
+          <button class="btn ghost" id="gn" type="button">グーネット</button>
+          <button class="btn ghost" id="p" type="button">新車価格</button>
+          <button class="btn ghost" id="w" type="button">車両重量</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="pill">ログ</div>
+      <div style="margin-top:12px"><pre id="log" style="min-height:210px">待機中</pre></div>
+
+      <hr>
+
+      <div class="pill">抽出テキスト（参考）</div>
+      <div style="margin-top:12px"><pre id="text" style="min-height:260px">未実行</pre></div>
+
+      <hr>
+
+      <div class="pill">Excelに入る内容（確認用）</div>
+      <div style="margin-top:12px"><pre id="preview">未入力</pre></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const state = { docxFile:null, pdfFile:null, xlsxFile:null, imgFile:null };
+
+for(let i=0;i<=25;i++){
+  const op=document.createElement("option");
+  op.value=String(i); op.textContent=String(i)+" か月";
+  $("remainSel").appendChild(op);
+}
+
+function setStatus(s){ $("status").textContent=s; }
+function log(s){ $("log").textContent = (new Date().toLocaleTimeString())+"  "+s+"\n"+$("log").textContent; }
+function showWarn(msg){ $("warn").style.display="block"; $("warn").textContent=msg; }
+function clearWarn(){ $("warn").style.display="none"; $("warn").textContent=""; }
+
+function openTab(url){
+  const a=document.createElement("a");
+  a.href=url; a.target="_blank"; a.rel="noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+  try{ window.open(url,"_blank","noopener"); }catch(e){}
+}
+function buildQuery(){
+  const a=[$("model").value.trim(), $("maker").value.trim(), $("nameg").value.trim()].filter(Boolean).join(" ").trim();
+  return a || $("model").value.trim() || $("nameg").value.trim() || $("maker").value.trim() || "";
+}
+$("g").onclick=()=>openTab("https://www.google.com/search?q="+encodeURIComponent(buildQuery()));
+$("cs").onclick=()=>openTab("https://www.carsensor.net/usedcar/bn/index.html?KW="+encodeURIComponent(buildQuery()));
+$("gn").onclick=()=>openTab("https://www.goo-net.com/usedcar/spread/goo-net/wordsearch.html?keyword="+encodeURIComponent(buildQuery()));
+$("p").onclick=()=>openTab("https://www.google.com/search?q="+encodeURIComponent(buildQuery()+" 新車時価格 新車価格"));
+$("w").onclick=()=>openTab("https://www.google.com/search?q="+encodeURIComponent(buildQuery()+" 車両重量"));
+
+function telNormalizeFrom(tel){
+  const d=String(tel||"").replace(/\D/g,"");
+  if(d.length===11 && /^(070|080|090)/.test(d)) return d.replace(/(\d{3})(\d{4})(\d{4})/,"$1-$2-$3");
+  if(d.length===10) return d.replace(/(\d{2,3})(\d{3,4})(\d{4})/,"$1-$2-$3");
+  return tel||"";
+}
+function telNormalize(){ $("tel").value = telNormalizeFrom($("tel").value); }
+$("btnTel").onclick=()=>{ telNormalize(); refresh(); };
+
+function parseYear(s){
+  s=String(s||"").trim();
+  if(!s) return null;
+  let m=s.match(/^R(\d{1,2})(?:[\/\-.](\d{1,2}))?$/i);
+  if(m) return {g:"令和", y:+m[1], mo:(m[2]?+m[2]:null)};
+  m=s.match(/^H(\d{1,2})(?:[\/\-.](\d{1,2}))?$/i);
+  if(m) return {g:"平成", y:+m[1], mo:(m[2]?+m[2]:null)};
+  m=s.match(/^S(\d{1,2})(?:[\/\-.](\d{1,2}))?$/i);
+  if(m) return {g:"昭和", y:+m[1], mo:(m[2]?+m[2]:null)};
+  m=s.match(/^20(\d{2})(?:[\/\-.](\d{1,2}))?$/);
+  if(m) return {g:"西暦", y:+("20"+m[1]), mo:(m[2]?+m[2]:null)};
+  return {g:"", y:s, mo:null};
+}
+function guessPref(t){
+  const m = t.match(/(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/);
+  return m ? m[1] : "";
+}
+
+function convertJapaneseEraDateToR(era, y, m, d){
+  if(era==="令和"){
+    return `R${y}/${m}${d?`/${d}`:""}`;
+  }
+  if(era==="平成"){
+    return `H${y}/${m}${d?`/${d}`:""}`;
+  }
+  if(era==="昭和"){
+    return `S${y}/${m}${d?`/${d}`:""}`;
+  }
+  return `${y}/${m}${d?`/${d}`:""}`;
+}
+
+function parseShakenYM(raw){
+  const s=(raw||"").trim();
+  if(!s) return {none:true};
+  if(/抹消|なし|無|車検無/.test(s)) return {none:true};
+
+  let m=s.match(/(令和|平成|昭和)\s*(\d{1,2})年\s*(\d{1,2})月(?:\s*(\d{1,2})日)?/);
+  if(m){
+    const era=m[1], yy=Number(m[2]), mm=Number(m[3]), dd=m[4]?Number(m[4]):null;
+    const isoY = (era==="令和") ? 2018+yy : (era==="平成") ? 1988+yy : (era==="昭和") ? 1925+yy : null;
+    return {y:isoY, m:mm, d:dd};
+  }
+
+  m=s.match(/\bR(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{1,2}))?\b/);
+  if(m){ return {y:2018+Number(m[1]), m:Number(m[2]), d:(m[3]?Number(m[3]):null)}; }
+
+  m=s.match(/\b(20\d{2})[\/\-.](\d{1,2})(?:[\/\-.](\d{1,2}))?\b/);
+  if(m){ return {y:Number(m[1]), m:Number(m[2]), d:(m[3]?Number(m[3]):null)}; }
+
+  return {unknown:true};
+}
+function calcRemainMonths(shakenRaw){
+  const base = new Date();
+  const p=parseShakenYM(shakenRaw);
+  if(p.none || p.unknown || !p.y || !p.m) return "";
+  const end=new Date(p.y,p.m,0);
+  const diff=(end.getFullYear()-base.getFullYear())*12 + ((end.getMonth()+1)-(base.getMonth()+1));
+  return Math.max(0,Math.min(25,Math.max(0,diff)));
+}
+function updateRemainHint(v){
+  $("remainHint").textContent = "残月: " + (v==="" ? "未設定" : (v+"ヶ月"));
+}
+$("btnCalc").onclick=()=>{
+  const s=$("shaken").value.trim();
+  const v = s ? String(calcRemainMonths(s)) : "";
+  if(v!==""){ $("remainSel").value=v; $("remain").value=v; }
+  updateRemainHint(v);
+  refresh();
+};
+$("remainSel").addEventListener("change",()=>{
+  $("remain").value = $("remainSel").value;
+  updateRemainHint($("remainSel").value);
+  refresh();
+});
+$("remain").addEventListener("input",()=>{
+  const v=$("remain").value.trim();
+  $("remainSel").value = (v!=="" && !Number.isNaN(Number(v))) ? String(Number(v)) : "";
+  updateRemainHint(v!==""?v:"");
+  refresh();
+});
+
+function parseWordRawText(t){
+  t = String(t||"");
+  let name="", zip="", pref="", addr="", tel="";
+  const m1=t.match(/([^\n\r]{2,20})\s*様/); if(m1) name=m1[1].trim();
+  const m2=t.match(/(\d{3}-\d{4})/); if(m2) zip=m2[1];
+  pref=guessPref(t);
+  if(pref){
+    const m3 = t.match(new RegExp(pref + "([^\n\r]+)"));
+    if(m3) addr=(pref+m3[1]).trim();
+  }
+  const m4=t.match(/(0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4})/);
+  if(m4) tel=m4[1].replace(/\s/g,"");
+
+  if(name && !$("name").value.trim()) $("name").value=name;
+  if(zip && !$("zip").value.trim()) $("zip").value=zip;
+  if(pref && !$("pref").value.trim()) $("pref").value=pref;
+  if(addr && !$("addr").value.trim()) $("addr").value=addr;
+  if(tel && !$("tel").value.trim()) $("tel").value=telNormalizeFrom(tel);
+
+  refresh();
+}
+
+function parseFromText(t){
+  t=String(t||"");
+  $("text").textContent = t || "(空)";
+
+  // ---- 日付候補をまとめて抽出し、「現在〜未来=車検」「過去=年式」を優先する ----
+  const base = new Date();
+  const baseYM = base.getFullYear()*12 + (base.getMonth()+1);
+
+  function ymToIndex(y,m){ return y*12 + m; }
+
+  function parseAnyDateToken(raw){
+    raw = String(raw||"").trim();
+    if(!raw) return null;
+
+    // 令和/平成/昭和 〇年〇月(〇日)
+    let m = raw.match(/(令和|平成|昭和)\s*(\d{1,2})年\s*(\d{1,2})月(?:\s*(\d{1,2})日)?/);
+    if(m){
+      const era=m[1], yy=Number(m[2]), mm=Number(m[3]), dd=m[4]?Number(m[4]):null;
+      const isoY = (era==="令和") ? 2018+yy : (era==="平成") ? 1988+yy : (era==="昭和") ? 1925+yy : null;
+      return {raw, y:isoY, m:mm, d:dd, kind:"eraYMD"};
+    }
+    // R8/9 or R8-9 or R8.9 (日付まである場合も)
+    m = raw.match(/\bR(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{1,2}))?\b/i);
+    if(m){
+      const y = 2018+Number(m[1]);
+      const mm = Number(m[2]);
+      const dd = m[3]?Number(m[3]):null;
+      return {raw, y, m:mm, d:dd, kind:"R"};
+    }
+    // 2026/9 など
+    m = raw.match(/\b(20\d{2})[\/\-.](\d{1,2})(?:[\/\-.](\d{1,2}))?\b/);
+    if(m){
+      return {raw, y:Number(m[1]), m:Number(m[2]), d:(m[3]?Number(m[3]):null), kind:"AD"};
+    }
+    return null;
+  }
+
+  // 近傍に「車検」等があるか（強いヒント）
+  function hasShakenContext(idxStart, idxEnd){
+    const around = t.slice(Math.max(0, idxStart-18), Math.min(t.length, idxEnd+18));
+    return /車検|有効|満了|期限/.test(around);
+  }
+
+  const candidates = [];
+
+  // eraYMD tokens
+  const reEra = /(令和|平成|昭和)\s*\d{1,2}年\s*\d{1,2}月(?:\s*\d{1,2}日)?/g;
+  for(const mm of t.matchAll(reEra)){
+    const tok = parseAnyDateToken(mm[0]);
+    if(tok) candidates.push({...tok, s:mm.index, e:mm.index+mm[0].length, ctx: hasShakenContext(mm.index, mm.index+mm[0].length)});
+  }
+
+  // R tokens (R8/9 etc)
+  const reR = /\bR\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{1,2})?\b/gi;
+  for(const mm of t.matchAll(reR)){
+    const tok = parseAnyDateToken(mm[0]);
+    if(tok) candidates.push({...tok, s:mm.index, e:mm.index+mm[0].length, ctx: hasShakenContext(mm.index, mm.index+mm[0].length)});
+  }
+
+  // AD tokens (2026/9 etc)
+  const reAD = /\b20\d{2}[\/\-.]\d{1,2}(?:[\/\-.]\d{1,2})?\b/g;
+  for(const mm of t.matchAll(reAD)){
+    const tok = parseAnyDateToken(mm[0]);
+    if(tok) candidates.push({...tok, s:mm.index, e:mm.index+mm[0].length, ctx: hasShakenContext(mm.index, mm.index+mm[0].length)});
+  }
+
+  // 年式（年だけ）例：令和3年
+  let yearOnly = null;
+  const yonly = t.match(/(令和|平成|昭和)\s*(\d{1,2})年(?!\s*\d{1,2}月)/);
+  if(yonly){
+    yearOnly = {era:yonly[1], y:Number(yonly[2])};
+  }
+
+  // 「現在〜未来=車検」「過去=年式」ルールで選ぶ（同時に車検文脈があるものは最優先）
+  let bestShaken = null;
+  let bestYear = null;
+
+  for(const c of candidates){
+    if(!c.y || !c.m) continue;
+    const idx = ymToIndex(c.y, c.m);
+    const isFutureOrNow = idx >= baseYM;
+    const isPast = idx < baseYM;
+
+    // 車検: 車検文脈 OR 現在〜未来
+    if(c.ctx || isFutureOrNow){
+      if(!bestShaken) bestShaken = c;
+    }
+
+    // 年式: 過去の年月（ただし「車検文脈あり」は除外）
+    if(isPast && !c.ctx){
+      if(!bestYear) bestYear = c;
+    }
+  }
+
+  // 車検欄を埋める（優先）
+  if(bestShaken && !$("shaken").value.trim()){
+    // 表示はR形式に寄せる（令和/平成/昭和は R/H/Sへ）
+    const raw = bestShaken.raw;
+    let out = raw;
+    const m = raw.match(/(令和|平成|昭和)\s*(\d{1,2})年\s*(\d{1,2})月(?:\s*(\d{1,2})日)?/);
+    if(m){
+      out = convertJapaneseEraDateToR(m[1], Number(m[2]), Number(m[3]), (m[4]?Number(m[4]):null));
+    }
+    $("shaken").value = out.replace(/\./g,"/").replace(/-/g,"/");
+  }
+
+  // 年式欄（過去の年月があれば R3/03 など。なければ 令和3年 だけを使う）
+  if(bestYear && !$("year").value.trim()){
+    const raw = bestYear.raw;
+    let out = raw;
+    // era -> R/H/S (月まで)
+    const m = raw.match(/(令和|平成|昭和)\s*(\d{1,2})年\s*(\d{1,2})月/);
+    if(m){
+      const era=m[1], yy=Number(m[2]), mm=Number(m[3]);
+      out = convertJapaneseEraDateToR(era, yy, mm, null); // R3/03
+      out = out.replace(/\/(\d{1,2})$/, "/"+String(mm).padStart(2,"0"));
+    }
+    $("year").value = out.replace(/\./g,"/").replace(/-/g,"/");
+  } else if(!bestYear && yearOnly && !$("year").value.trim()){
+    // 年だけは「R3」形式で入れる（月は空欄）
+    const map = { "令和":"R", "平成":"H", "昭和":"S" };
+    $("year").value = map[yearOnly.era] + String(yearOnly.y);
+  }
+
+  // 型式
+  let m=t.match(/型式[:：]?\s*([A-Z0-9\-]{4,25})/);
+  if(m && !$("model").value.trim()) $("model").value=m[1].trim();
+
+  // 車台番号
+  m=t.match(/車台(?:番号)?[:：]?\s*([A-Z0-9\-]{6,25})/);
+  if(m && !$("chassis").value.trim()) $("chassis").value=m[1].trim();
+
+  // 排気量
+  m=t.match(/排気量[:：]?\s*([0-9]{3,5})\s*cc/i);
+  if(m && !$("disp").value.trim()) $("disp").value=String(Number(m[1]));
+
+  // 会場
+  m=t.match(/(USS[^\s\n\r]{1,12})/);
+  if(m && !$("venue").value.trim()) $("venue").value=m[1];
+
+  // リサイクル
+  m=t.match(/リサイクル(?:料)?[:：]?\s*([0-9,]{3,10})/);
+  if(m && !$("recycle").value.trim()) $("recycle").value=m[1];
+
+  // 残月自動
+  if($("shaken").value.trim()){
+    const v = String(calcRemainMonths($("shaken").value.trim()));
+    if(v!=="" && !$("remain").value.trim()){
+      $("remain").value=v;
+      $("remainSel").value=v;
+      updateRemainHint(v);
+    }
+  }
+
+  // 年式が「車検っぽい未来年月」だったら警告（見落とし防止）
+  if($("year").value.trim()){
+    const yy = $("year").value.trim();
+    const p = parseShakenYM(yy);
+    if(!p.none && !p.unknown && p.y && p.m){
+      const idx = p.y*12 + p.m;
+      if(idx >= baseYM){
+        log("⚠️ 年式欄に現在〜未来の年月が入っています。車検の可能性が高いので確認してください。");
+      }
+    }
+  } else {
+    log("⚠️ 年式が検出できませんでした（必要なら手入力してください）。");
+  }
+
+  refresh();
+}
+
+
+async function readDocxFile(file){
+  if(!file) return;
+  state.docxFile=file;
+  $("docxInfo").textContent = file.name + " (" + Math.round(file.size/1024) + "KB)";
+  if(!window.mammoth){ showWarn("DOCXライブラリが読み込めていません。http://localhost か https で開いてください。"); return; }
+  clearWarn();
+  setStatus("Word解析中…");
+  log("Word解析開始: "+file.name);
+  const ab=await file.arrayBuffer();
+  const res=await mammoth.extractRawText({arrayBuffer:ab});
+  parseWordRawText(res.value||"");
+  setStatus("Word解析OK");
+  log("Word解析OK");
+}
+
+async function readPdfFile(file){
+  if(!file) return;
+  state.pdfFile=file;
+  $("pdfInfo").textContent = file.name + " (" + Math.round(file.size/1024) + "KB)";
+  if(!window.pdfjsLib){ showWarn("PDF.jsが読み込めていません。http://localhost か https で開くか、OCRを使ってください。"); return; }
+  clearWarn();
+  setStatus("PDF解析中…");
+  log("PDF解析開始: "+file.name);
+  const ab=await file.arrayBuffer();
+  const task = pdfjsLib.getDocument({data:ab, disableWorker:true});
+  const pdf=await task.promise;
+  const maxPages = Math.min(2, pdf.numPages);
+  let all="";
+  for(let p=1;p<=maxPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    all += "\n" + content.items.map(it=>it.str).join("\n");
+  }
+  setStatus("PDF解析OK");
+  log("PDF解析OK");
+  parseFromText(all);
+}
+
+function setXlsxFile(file){
+  if(!file) return;
+  state.xlsxFile=file;
+  $("xlsxInfo").textContent = file.name + " (" + Math.round(file.size/1024) + "KB)";
+  refresh();
+}
+
+function drawImageToCanvas(file){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const cv=$("cv"), ctx=cv.getContext("2d");
+      const maxW=900;
+      const scale=Math.min(1, maxW/img.width);
+      cv.width=Math.round(img.width*scale);
+      cv.height=Math.round(img.height*scale);
+      ctx.clearRect(0,0,cv.width,cv.height);
+      ctx.drawImage(img,0,0,cv.width,cv.height);
+      resolve();
+    };
+    img.onerror=reject;
+    img.src=URL.createObjectURL(file);
+  });
+}
+
+async function runOcr(){
+  if(!state.imgFile) state.imgFile=$("img").files[0];
+  if(!state.imgFile) return alert("スクショ画像を選択/貼り付けしてください");
+  if(!window.Tesseract){
+    setStatus("OCRライブラリ読込…");
+    log("OCRライブラリ読込");
+    const ok = await loadAny([
+      "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js",
+      "https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"
+    ]);
+    $("libOcr").textContent = "OCR:"+(ok?"OK":"NG");
+    if(!ok){ showWarn("OCRライブラリが読めませんでした（ネット/ブロック確認）。"); return; }
+  } else {
+    $("libOcr").textContent = "OCR:OK";
+  }
+
+  await drawImageToCanvas(state.imgFile);
+  const cv=$("cv");
+  setStatus("OCR中…");
+  log("OCR開始: "+(state.imgFile.name||"(paste image)"));
+  const { data } = await Tesseract.recognize(cv, "jpn+eng", {
+    logger: m => {
+      if(m.status==="recognizing text"){ setStatus(`OCR中… ${(m.progress*100).toFixed(0)}%`); }
+    }
+  });
+  setStatus("OCR完了");
+  log("OCR完了");
+  parseFromText((data && data.text) ? data.text : "");
+}
+
+function safeName(s){return String(s||"output").replace(/[\\/:*?"<>|]/g,"_");}
+
+function setCell(ws, addr, value, styleFn){
+  const cell=ws.getCell(addr);
+  if(cell && typeof cell.value==="object" && cell.value && cell.value.formula) return;
+  cell.value = (value===undefined || value===null) ? "" : value;
+  if(styleFn) styleFn(cell);
+}
+function applyTextStyle(cell, opts={}){
+  cell.numFmt = "@";
+  if(!cell.alignment) cell.alignment = {};
+  if(opts.center) cell.alignment = {...cell.alignment, horizontal:"center", vertical:"middle"};
+  if(opts.wrap) cell.alignment = {...cell.alignment, wrapText:true, vertical:"top"};
+  if(opts.shrink) cell.alignment = {...cell.alignment, shrinkToFit:true};
+}
+
+async function downloadFilledExcel(){
+  const tpl = state.xlsxFile || $("xlsx").files[0];
+  if(!tpl) return alert("テンプレ.xlsxを選択してください");
+  if(!window.ExcelJS) return alert("ExcelJSが読み込めていません（http://localhost か https で開いてください）");
+
+  setStatus("Excel作成中…");
+  log("Excel作成開始: "+tpl.name);
+  const buf=await tpl.arrayBuffer();
+  const wb=new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+
+  const ws = wb.getWorksheet("①見積書") || wb.getWorksheet("見積書") || wb.worksheets[0];
+
+  setCell(ws,"A2",$("name").value, c=>applyTextStyle(c,{center:true,shrink:true}));
+  setCell(ws,"B3",$("zip").value, c=>applyTextStyle(c,{shrink:true}));
+  setCell(ws,"G3",$("pref").value, c=>applyTextStyle(c,{center:true,shrink:true}));
+  setCell(ws,"B4",$("addr").value, c=>applyTextStyle(c,{wrap:true,shrink:true}));
+  setCell(ws,"B7",telNormalizeFrom($("tel").value), c=>applyTextStyle(c,{shrink:true}));
+
+  setCell(ws,"B9",$("maker").value, c=>applyTextStyle(c,{shrink:true}));
+  setCell(ws,"B10",$("nameg").value, c=>applyTextStyle(c,{shrink:true}));
+
+  const y=parseYear($("year").value);
+  if(y){
+    setCell(ws,"B11",y.g || "", c=>applyTextStyle(c,{center:true,shrink:true}));
+    // C11は「年」を表示（値は数値のまま）
+    if(y.y!==undefined && y.y!=="" && y.y!==null){
+      setCell(ws,"C11",Number(y.y), c=>{ c.numFmt='0"年"'; if(!c.alignment) c.alignment={}; c.alignment={...c.alignment,horizontal:"center",vertical:"middle"}; });
+    } else {
+      setCell(ws,"C11","", c=>applyTextStyle(c,{center:true,shrink:true}));
+    }
+    // G11は月がある時だけ「月」を表示（値は数値のまま）
+    if(y.mo!=null && y.mo!=="" && y.mo!==undefined){
+      setCell(ws,"G11",Number(y.mo), c=>{ c.numFmt='0"月"'; if(!c.alignment) c.alignment={}; c.alignment={...c.alignment,horizontal:"center",vertical:"middle"}; });
+    } else {
+      setCell(ws,"G11","", c=>applyTextStyle(c,{center:true,shrink:true}));
+    }
+  }
+
+  setCell(ws,"B12",$("model").value, c=>applyTextStyle(c,{shrink:true}));
+  setCell(ws,"B13",$("chassis").value, c=>applyTextStyle(c,{shrink:true}));
+  // B14: 排気量（数値）。表示だけ cc を付ける（数式を壊さない）
+  (function(){
+    const v = $("disp").value.trim();
+    const n = v==="" ? "" : Number(String(v).replace(/[^0-9]/g,""));
+    if(v==="" || !isFinite(n)){
+      setCell(ws,"B14","", c=>applyTextStyle(c,{shrink:true}));
+    } else {
+      setCell(ws,"B14",n, c=>{ c.numFmt='0"cc"'; if(!c.alignment) c.alignment={}; c.alignment={...c.alignment, vertical:"middle"}; });
+    }
+  })();
+
+  setCell(ws,"M10",$("venue").value, c=>applyTextStyle(c,{shrink:true,center:true}));
+
+  const rmRaw = ($("remain").value.trim() || $("remainSel").value.trim() || "");
+  const rmNum = rmRaw!=="" && !Number.isNaN(Number(rmRaw)) ? Math.max(0,Math.min(25,Number(rmRaw))) : null;
+  if(rmNum!==null) setCell(ws,"N12",rmNum, c=>{ c.numFmt='0"ヶ月"'; if(!c.alignment) c.alignment={}; c.alignment={...c.alignment,horizontal:"center",vertical:"middle"}; });
+
+  const priceRaw=$("price").value.trim();
+  if(priceRaw){
+    const n = Number(String(priceRaw).replace(/[,万円円\s]/g,""));
+    setCell(ws,"L12", Number.isFinite(n) && n>0 ? n : priceRaw, c=>{
+      c.numFmt = (Number.isFinite(n) && n>0) ? '#,##0"万円"' : "@";
+      if(!c.alignment) c.alignment={};
+      c.alignment={...c.alignment, horizontal:"center", vertical:"middle"};
+    });
+  }
+
+  const weightRaw=$("weight").value.trim();
+  if(weightRaw){
+    const n = Number(String(weightRaw).replace(/\D/g,""));
+    setCell(ws,"N14", Number.isFinite(n) && n>0 ? n : weightRaw, c=>{
+      c.numFmt = (Number.isFinite(n) && n>0) ? '0"kg"' : "@";
+      if(!c.alignment) c.alignment={};
+      c.alignment={...c.alignment, horizontal:"center", vertical:"middle"};
+    });
+  }
+
+  const recRaw=$("recycle").value.trim();
+  if(recRaw){
+    const n = Number(String(recRaw).replace(/[,円\s]/g,""));
+    setCell(ws,"G14", Number.isFinite(n) && n>0 ? n : recRaw, c=>{
+      c.numFmt = (Number.isFinite(n) && n>0) ? '#,##0"円"' : "@";
+      if(!c.alignment) c.alignment={};
+      c.alignment={...c.alignment, horizontal:"center", vertical:"middle"};
+    });
+  }
+
+  const out=await wb.xlsx.writeBuffer();
+  const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download = `${safeName($("name").value||"お客様")}_${safeName($("nameg").value||"車両")}_入力済み.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+
+  setStatus("ExcelDL完了");
+  log("ExcelDL完了");
+}
+
+$("btnDL").onclick=downloadFilledExcel;
+
+function refresh(){
+  telNormalize();
+  const rm = $("remain").value.trim() || $("remainSel").value.trim() || "";
+  updateRemainHint(rm);
+
+  $("btnDL").disabled = !(state.xlsxFile && window.ExcelJS);
+
+  const y=parseYear($("year").value);
+  const lines=[];
+  lines.push("【①見積書シートへ書き込み予定（表示は単位付き）】");
+  lines.push(`A2: ${$("name").value}`);
+  lines.push(`B3: ${$("zip").value}`);
+  lines.push(`G3: ${$("pref").value}`);
+  lines.push(`B4: ${$("addr").value}`);
+  lines.push(`B7: ${$("tel").value}`);
+  lines.push("--- 車両 ---");
+  lines.push(`B9: ${$("maker").value}`);
+  lines.push(`B10: ${$("nameg").value}`);
+  lines.push(`B11: ${y?y.g:""} / C11: ${y?y.y:""} / G11: ${(y && y.mo!=null)?y.mo:""}`);
+  lines.push(`B12: ${$("model").value}`);
+  lines.push(`B13: ${$("chassis").value}`);
+  lines.push(`B14: ${$("disp").value}`);
+  lines.push(`M10: ${$("venue").value}`);
+  lines.push(`車検: ${$("shaken").value} / 残月(N12): ${rm}${rm!==""?"ヶ月":""}`);
+  lines.push(`G14(表示): ${$("recycle").value}${$("recycle").value.trim()? "円":""}`);
+  lines.push(`L12(表示): ${$("price").value}${$("price").value.trim()? "万円":""}`);
+  lines.push(`N14(表示): ${$("weight").value}${$("weight").value.trim()? "kg":""}`);
+  $("preview").textContent = lines.join("\n");
+}
+
+["name","zip","pref","addr","tel","maker","nameg","year","model","chassis","disp","venue","shaken","recycle","price","weight"].forEach(id=>$(id).addEventListener("input",refresh));
+
+function makeDropZone(el){
+  el.tabIndex=0;
+  el.addEventListener("dragenter",e=>{e.preventDefault();el.classList.add("drag");});
+  el.addEventListener("dragover",e=>{e.preventDefault();});
+  el.addEventListener("dragleave",e=>{el.classList.remove("drag");});
+  el.addEventListener("drop",e=>{
+    e.preventDefault(); el.classList.remove("drag");
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+      const f=[...e.dataTransfer.files].find(x=>x.type.startsWith("image/"));
+      if(f){ state.imgFile=f; $("imgInfo").textContent=f.name+" ("+Math.round(f.size/1024)+"KB)"; log("drop image: "+f.name); }
+    }
+  });
+  el.addEventListener("paste",e=>{
+    const items=e.clipboardData && e.clipboardData.items ? [...e.clipboardData.items] : [];
+    for(const it of items){
+      if(it.kind==="file"){
+        const f=it.getAsFile();
+        if(f && f.type.startsWith("image/")){
+          e.preventDefault();
+          state.imgFile=f;
+          $("imgInfo").textContent="(貼り付け画像) "+f.type+" "+Math.round(f.size/1024)+"KB";
+          log("paste image");
+          break;
+        }
+      }
+    }
+  });
+}
+makeDropZone($("dropImg"));
+
+$("docx").addEventListener("change",()=>readDocxFile($("docx").files[0]));
+$("pdf").addEventListener("change",()=>readPdfFile($("pdf").files[0]));
+$("xlsx").addEventListener("change",()=>setXlsxFile($("xlsx").files[0]));
+$("img").addEventListener("change",()=>{
+  state.imgFile=$("img").files[0];
+  if(state.imgFile) $("imgInfo").textContent = state.imgFile.name + " ("+Math.round(state.imgFile.size/1024)+"KB)";
+});
+$("btnReadDocx").onclick=()=>readDocxFile(state.docxFile || $("docx").files[0]);
+$("btnReadPdf").onclick=()=>readPdfFile(state.pdfFile || $("pdf").files[0]);
+$("btnOcr").onclick=runOcr;
+
+async function loadScript(url){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src=url; s.async=true;
+    s.onload=()=>resolve(url);
+    s.onerror=()=>reject(new Error("failed:"+url));
+    document.head.appendChild(s);
+  });
+}
+async function loadAny(urls){
+  for(const u of urls){
+    try{ await loadScript(u); return true; }catch(e){}
+  }
+  return false;
+}
+
+(async function boot(){
+  const okExcel = await loadAny([
+    "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js",
+    "https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js"
+  ]);
+  $("libExcel").textContent="ExcelJS:"+(okExcel?"OK":"NG");
+
+  const okDocx = await loadAny([
+    "https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js",
+    "https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"
+  ]);
+  $("libDocx").textContent="DOCX:"+(okDocx?"OK":"NG");
+
+  const okPdf = await loadAny([
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.js",
+    "https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.min.js",
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js",
+    "https://unpkg.com/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"
+  ]);
+  $("libPdf").textContent="PDF:"+(okPdf?"OK":"NG");
+
+  if(!okExcel || !okDocx || !okPdf){
+    showWarn("一部ライブラリがNGです。file://で開くとNGになりやすいので、http://localhost か https(GitHub Pages)で開いてください。");
+  } else {
+    clearWarn();
+  }
+  refresh();
+  log("起動完了");
+})();
+refresh();
+</script>
+</body>
+</html>
